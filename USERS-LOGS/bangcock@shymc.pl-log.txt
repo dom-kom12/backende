@@ -1,0 +1,10 @@
+[17.10.2025, 19:28:55] 🆕 Rejestracja nowego użytkownika
+[17.10.2025, 19:29:05] ✅ Zalogowano
+[17.10.2025, 19:31:25] 📤 Wysłano wiadomość do admin@shymc.pl
+[17.10.2025, 19:44:02] 📤 Wysłano wiadomość do admin@shymc.pl
+[17.10.2025, 19:46:59] 🗑️ Przeniósł wiadomość (1760723042225) do trash
+[17.10.2025, 19:58:37] 🗑️ Przeniósł wiadomość (1760723042225) do trash
+[17.10.2025, 19:58:43] 🗑️ Przeniósł wiadomość (1760723042225) do trash
+[17.10.2025, 19:58:48] 🗑️ Przeniósł wiadomość (1760722285986) do trash
+[18.10.2025, 10:12:22] (IP: ::1) 🗑️ Przeniósł wiadomość (1760723042225) do trash
+[18.10.2025, 10:12:25] (IP: ::1) 🗑️ Przeniósł wiadomość (1760723042225) do trash
