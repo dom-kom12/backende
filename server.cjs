@@ -7,9 +7,6 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 
-// Dla Vercela – typy (TS hint, nie przeszkadza w działaniu)
-const { VercelRequest, VercelResponse } = require('@vercel/node');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -28,12 +25,14 @@ if (!fs.existsSync(mailsFile)) fs.writeFileSync(mailsFile, JSON.stringify([], nu
 app.use(bodyParser.json({ limit: '2mb' }));
 app.use(express.static(frontendDir));
 
-// CORS – pozwól na żądania z frontendu
-app.use(cors({
-  origin: 'https://shymc.rf.gd', // Twój frontend
-  methods: ['GET', 'POST', 'DELETE'],
-  allowedHeaders: ['Content-Type']
-}));
+// CORS – uniwersalny middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://shymc.rf.gd'); // Twój frontend
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 // === Pomocnicze funkcje ===
 function readJSON(file, def = []) {
@@ -202,7 +201,5 @@ if (require.main === module) {
   });
 }
 
-// === Handler dla Vercel ===
-export default function handler(req, res) {
-  app(req, res);
-}
+// === Eksport dla serverless (Vercel / Netlify Functions) ===
+module.exports = (req, res) => app(req, res);
