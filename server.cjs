@@ -1,4 +1,4 @@
-// === Gmail GX Backend (wersja FILE-BASED) ===
+// === Gmail GX Backend (wersja FILE-BASED) ===2
 // Działa z Render, zapisuje do users.json, mails.json i logs/
 
 const express = require("express");
