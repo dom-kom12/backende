@@ -1,117 +1,169 @@
-// server.cjs 2
+// === Gmail GX Backend (wersja FILE-BASED) ===
+// Działa z Render, zapisuje do users.json, mails.json i logs/
+
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const cors = require("cors");
-const mongoose = require("mongoose");
+const bodyParser = require("body-parser");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ====== 🔒 KONFIGURACJA CORS ======
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
-}));
-app.use(express.json());
+// === Ścieżki do plików ===
+const usersFile = path.join(__dirname, "users.json");
+const mailsFile = path.join(__dirname, "mails.json");
+const logsDir = path.join(__dirname, "USERS_LOGS");
 
-// ====== 🌍 PRZEKIEROWANIE STRONY GŁÓWNEJ ======
+// Tworzy pliki i foldery jeśli nie istnieją
+if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([], null, 2));
+if (!fs.existsSync(mailsFile)) fs.writeFileSync(mailsFile, JSON.stringify([], null, 2));
+
+// === Middleware ===
+app.use(bodyParser.json({ limit: "20mb" }));
+
+// CORS tylko dla shymc.rf.gd
+app.use((req, res, next) => {
+  const allowedOrigin = "https://shymc.rf.gd";
+  if (req.headers.origin === allowedOrigin) {
+    res.header("Access-Control-Allow-Origin", allowedOrigin);
+  }
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
+
+// === Pomocnicze funkcje ===
+function readJSON(file, def = []) {
+  try {
+    if (!fs.existsSync(file)) return def;
+    const data = fs.readFileSync(file, "utf8");
+    return data ? JSON.parse(data) : def;
+  } catch (err) {
+    console.error("❌ Błąd odczytu JSON:", err);
+    return def;
+  }
+}
+
+function writeJSON(file, data) {
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error("❌ Błąd zapisu JSON:", err);
+  }
+}
+
+function logUserAction(user, action, req = null) {
+  try {
+    const logFile = path.join(logsDir, `${user.replace(/[@.]/g, "_")}.log`);
+    const now = new Date().toLocaleString("pl-PL", { timeZone: "Europe/Warsaw" });
+    const ip = req ? (req.headers["x-forwarded-for"] || req.socket.remoteAddress) : "localhost";
+    fs.appendFileSync(logFile, `[${now}] (IP: ${ip}) ${action}\n`);
+  } catch (err) {
+    console.error("❌ Błąd logowania akcji:", err);
+  }
+}
+
+// === ROUTES ===
+
+// Strona główna → przekierowanie
 app.get("/", (req, res) => {
   res.redirect("https://shymc.rf.gd");
 });
 
-// ====== ⚙️ POŁĄCZENIE Z MONGODB ======
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://komputer200012_db_user:domino2012R@cluster0.8y3zzec.mongodb.net/";
-
-mongoose.connect(MONGO_URI)
-  .then(() => console.log("✅ Połączono z MongoDB Atlas"))
-  .catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
-
-// ====== 📦 SCHEMATY DANYCH ======
-const userSchema = new mongoose.Schema({
-  email: String,
-  password: String,
-  lastLogin: Date
-});
-
-const messageSchema = new mongoose.Schema({
-  to: String,
-  from: String,
-  subject: String,
-  content: String,
-  date: { type: Date, default: Date.now }
-});
-
-const logSchema = new mongoose.Schema({
-  user: String,
-  action: String,
-  date: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model("User", userSchema);
-const Message = mongoose.model("Message", messageSchema);
-const Log = mongoose.model("Log", logSchema);
-
-// ====== 🧾 FUNKCJE POMOCNICZE ======
-function logUserAction(user, action) {
-  new Log({ user, action }).save();
-  console.log(`📘 [${new Date().toISOString()}] ${user}: ${action}`);
-}
-
-// ====== 🧍‍♂️ REJESTRACJA ======
-app.post("/api/register", async (req, res) => {
+// Rejestracja
+app.post("/api/register", (req, res) => {
   const { username, domain, password } = req.body;
   if (!username || !domain || !password)
     return res.status(400).json({ message: "⚠️ Podaj wszystkie dane" });
 
   const email = (username + domain).toLowerCase();
-  const exists = await User.findOne({ email });
-  if (exists)
+  const users = readJSON(usersFile);
+
+  if (users.find((u) => u.email === email))
     return res.status(400).json({ message: "❌ Użytkownik już istnieje" });
 
-  await User.create({ email, password, lastLogin: null });
-  logUserAction(email, "🆕 Rejestracja nowego użytkownika");
+  users.push({ email, password, lastLogin: null });
+  writeJSON(usersFile, users);
+
+  logUserAction(email, "🆕 Rejestracja nowego użytkownika", req);
+  console.log(`📥 Nowa rejestracja: ${email}`);
+
   res.json({ message: `✅ Zarejestrowano jako ${email}` });
 });
 
-// ====== 🔑 LOGOWANIE ======
-app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email, password });
+// Logowanie
+app.post("/api/login", (req, res) => {
+  const { username, domain, password } = req.body;
+  const email = (username + domain).toLowerCase();
+  const users = readJSON(usersFile);
+
+  const user = users.find((u) => u.email === email && u.password === password);
   if (!user)
     return res.status(401).json({ message: "❌ Nieprawidłowe dane logowania" });
 
-  user.lastLogin = new Date();
-  await user.save();
-  logUserAction(email, "✅ Logowanie");
-  res.json({ message: `Witaj ponownie, ${email}` });
+  user.lastLogin = new Date().toISOString();
+  writeJSON(usersFile, users);
+  logUserAction(email, "✅ Zalogowano", req);
+
+  res.json({ message: `Zalogowano jako ${email}` });
+  console.log(`🔑 Login: ${email}`);
 });
 
-// ====== ✉️ WIADOMOŚCI ======
-app.post("/api/messages", async (req, res) => {
-  const { to, from, subject, content } = req.body;
-  if (!to || !from || !content)
-    return res.status(400).json({ message: "⚠️ Brak wymaganych danych" });
+// Wysyłanie wiadomości
+app.post("/api/send", (req, res) => {
+  const { from, to, subject, body } = req.body;
+  if (!from || !to || !subject || !body)
+    return res.status(400).json({ message: "⚠️ Brak danych wiadomości" });
 
-  await Message.create({ to, from, subject, content });
-  logUserAction(from, `📨 Wysłał wiadomość do ${to}`);
-  res.json({ message: "✅ Wiadomość wysłana" });
+  const mails = readJSON(mailsFile);
+  mails.push({
+    id: Date.now(),
+    from,
+    to,
+    subject,
+    body,
+    date: new Date().toISOString(),
+    folder: "inbox",
+  });
+  writeJSON(mailsFile, mails);
+
+  logUserAction(from, `📤 Wysłano wiadomość do ${to}`, req);
+  console.log(`📨 Mail od ${from} do ${to}`);
+
+  res.json({ message: "📨 Wiadomość wysłana!" });
 });
 
-app.get("/api/messages/:email", async (req, res) => {
-  const { email } = req.params;
-  const messages = await Message.find({ to: email });
-  res.json(messages);
+// Pobieranie wiadomości
+app.get("/api/messages/:email", (req, res) => {
+  const email = req.params.email.toLowerCase();
+  const mails = readJSON(mailsFile);
+  const filtered = mails.filter((m) => m.to === email || m.from === email);
+  res.json(filtered);
 });
 
-// ====== 🧾 LOGI ======
-app.get("/api/logs", async (req, res) => {
-  const logs = await Log.find().sort({ date: -1 });
-  res.json(logs);
+// Usuwanie wiadomości
+app.delete("/api/delete/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  let mails = readJSON(mailsFile);
+
+  const mail = mails.find((m) => m.id === id);
+  if (!mail) return res.status(404).json({ message: "❌ Mail nie istnieje" });
+
+  mails = mails.filter((m) => m.id !== id);
+  writeJSON(mailsFile, mails);
+
+  logUserAction(mail.from, `❌ Usunięto wiadomość (${id})`, req);
+  console.log(`🗑️ Usunięto mail ID ${id}`);
+
+  res.json({ message: "🗑️ Mail usunięty" });
 });
 
-// ====== 🚀 START SERWERA ======
-app.listen(PORT, () => {
-  console.log(`🌐 Serwer działa na porcie ${PORT}`);
+// 404 fallback
+app.use((req, res) => {
+  res.status(404).json({ message: "❌ Nie znaleziono endpointu" });
 });
+
+// Start serwera
+app.listen(PORT, () => console.log(`🚀 Backend Gmail GX działa na porcie ${PORT}`));
