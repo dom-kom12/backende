@@ -18,7 +18,12 @@ if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([], nu
 if (!fs.existsSync(mailsFile)) fs.writeFileSync(mailsFile, JSON.stringify([], null, 2));
 
 // === Middleware ===
-app.use(bodyParser.json({ limit: '2mb' }));
+app.use(bodyParser.json({ limit: '20mb' }));
+
+// Jeśli ktoś wejdzie bezpośrednio na backend -> przekieruj do frontendu
+app.get('/', (req, res) => {
+  res.redirect('https://shymc.rf.gd');
+});
 
 // CORS tylko dla shymc.rf.gd
 app.use((req, res, next) => {
