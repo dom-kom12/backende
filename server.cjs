@@ -12,6 +12,20 @@ const usersFile = path.join(__dirname, 'users.json');
 const mailsFile = path.join(__dirname, 'mails.json');
 const logsDir = path.join(__dirname, 'USERS-LOGS');
 
+const SERVICE_ID = "srv-d3tu57uuk2gs73df4t40";
+const RENDER_API_TOKEN = "rnd_FPp3tCeBhjCxOYffuWow8kCqeifK";
+
+app.get("/logs", async (req, res) => {
+  try {
+    const response = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/events?type=LOG&max=50`, {
+      headers: { Authorization: `Bearer ${RENDER_API_TOKEN}` }
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // Tworzenie folderów/plików
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([], null, 2));
