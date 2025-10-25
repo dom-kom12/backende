@@ -3,6 +3,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
+const fetch = require('node-fetch'); // jeśli Node < 18, w Node 18+ możesz użyć globalnego fetch
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,29 +16,8 @@ const logsDir = path.join(__dirname, 'USERS-LOGS');
 const SERVICE_ID = "srv-d3tu57uuk2gs73df4t40";
 const RENDER_API_TOKEN = "rnd_FPp3tCeBhjCxOYffuWow8kCqeifK";
 
-app.get("/logs", async (req, res) => {
-  try {
-    const response = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/events?type=LOG&max=50`, {
-      headers: { Authorization: `Bearer ${RENDER_API_TOKEN}` }
-    });
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-// Tworzenie folderów/plików
-if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([], null, 2));
-if (!fs.existsSync(mailsFile)) fs.writeFileSync(mailsFile, JSON.stringify([], null, 2));
-
 // === Middleware ===
 app.use(bodyParser.json({ limit: '20mb' }));
-
-// Jeśli ktoś wejdzie bezpośrednio na backend -> przekieruj do frontendu
-app.get('/', (req, res) => {
-  res.redirect('https://shymc.rf.gd');
-});
 
 // CORS tylko dla shymc.rf.gd
 app.use((req, res, next) => {
@@ -50,6 +30,11 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
+
+// Tworzenie folderów/plików jeśli nie istnieją
+if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([], null, 2));
+if (!fs.existsSync(mailsFile)) fs.writeFileSync(mailsFile, JSON.stringify([], null, 2));
 
 // === Pomocnicze funkcje ===
 function readJSON(file, def = []) {
@@ -85,6 +70,27 @@ function logUserAction(user, action, req = null) {
 }
 
 // === ROUTES ===
+
+// Redirect root do frontendu
+app.get('/', (req, res) => {
+  res.redirect('https://shymc.rf.gd');
+});
+
+// Endpoint do logów Render
+app.get('/api/logs', async (req, res) => {
+  try {
+    const response = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/events?type=LOG&max=50`, {
+      headers: { Authorization: `Bearer ${RENDER_API_TOKEN}` }
+    });
+
+    if (!response.ok) return res.status(response.status).json({ error: 'Błąd pobierania logów z Render' });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd sieci: ' + err.message });
+  }
+});
 
 // Rejestracja
 app.post('/api/register', (req, res) => {
@@ -157,7 +163,7 @@ app.delete('/api/delete/:id', (req, res) => {
   res.json({ message: '🗑️ Mail usunięty' });
 });
 
-// Start
+// Start serwera
 app.listen(PORT, () => {
   console.log(`🚀 Backend Gmail GX działa na porcie ${PORT}`);
 });
