@@ -13,9 +13,6 @@ const usersFile = path.join(__dirname, 'users.json');
 const mailsFile = path.join(__dirname, 'mails.json');
 const logsDir = path.join(__dirname, 'USERS-LOGS');
 
-const SERVICE_ID = "srv-d3tu57uuk2gs73df4t40";
-const RENDER_API_TOKEN = "rnd_FPp3tCeBhjCxOYffuWow8kCqeifK";
-
 // Tworzenie folderów/plików jeśli nie istnieją
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify([], null, 2));
@@ -38,13 +35,23 @@ app.use((req, res, next) => {
 
 // === Pomocnicze funkcje ===
 function readJSON(file, def = []) {
-  try { if (!fs.existsSync(file)) return def; return JSON.parse(fs.readFileSync(file, 'utf8') || '[]'); }
-  catch (err) { console.error('Błąd odczytu JSON:', err); return def; }
+  try { 
+    if (!fs.existsSync(file)) return def; 
+    return JSON.parse(fs.readFileSync(file, 'utf8') || '[]'); 
+  } catch (err) { 
+    console.error('Błąd odczytu JSON:', err); 
+    return def; 
+  }
 }
+
 function writeJSON(file, data) {
-  try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
-  catch (err) { console.error('Błąd zapisu JSON:', err); }
+  try { 
+    fs.writeFileSync(file, JSON.stringify(data, null, 2)); 
+  } catch (err) { 
+    console.error('Błąd zapisu JSON:', err); 
+  }
 }
+
 function logUserAction(user, action, req = null) {
   try {
     const logFile = path.join(logsDir, `${user}-log.txt`);
@@ -56,7 +63,9 @@ function logUserAction(user, action, req = null) {
     });
     const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress) : 'localhost';
     fs.appendFileSync(logFile, `[${date}] (IP: ${ip}) ${action}\n`);
-  } catch (err) { console.error('Błąd logowania akcji:', err); }
+  } catch (err) { 
+    console.error('Błąd logowania akcji:', err); 
+  }
 }
 
 // === ROUTES ===
@@ -79,14 +88,15 @@ app.get('/api/logs', async (req, res) => {
 // Rejestracja
 app.post('/api/register', (req,res)=>{ 
   const {username,domain,password}=req.body;
-  if(!username||!domain||!password)return res.status(400).json({message:'⚠️ Podaj wszystkie dane'});
+  if(!username||!domain||!password) return res.status(400).json({message:'⚠️ Podaj wszystkie dane'});
   const email=(username+domain).toLowerCase();
   const users=readJSON(usersFile);
-  if(users.find(u=>u.email===email))return res.status(400).json({message:'❌ Użytkownik już istnieje'});
+  if(users.find(u=>u.email===email)) return res.status(400).json({message:'❌ Użytkownik już istnieje'});
   users.push({email,password,lastLogin:null});
   writeJSON(usersFile,users);
   logUserAction(email,'🆕 Rejestracja nowego użytkownika',req);
   res.json({message:`✅ Zarejestrowano jako ${email}`});
+  console.log(`Nowa rejestracja ${email}`);
 });
 
 // Logowanie
@@ -95,22 +105,24 @@ app.post('/api/login', (req,res)=>{
   const email=(username+domain).toLowerCase();
   const users=readJSON(usersFile);
   const user=users.find(u=>u.email===email&&u.password===password);
-  if(!user)return res.status(401).json({message:'❌ Nieprawidłowe dane logowania'});
+  if(!user) return res.status(401).json({message:'❌ Nieprawidłowe dane logowania'});
   user.lastLogin=new Date().toISOString();
   writeJSON(usersFile,users);
   logUserAction(email,'✅ Zalogowano',req);
   res.json({message:`Zalogowano jako ${email}`});
+  console.log(`Nowy login ${email}`);
 });
 
 // Wysyłanie wiadomości
 app.post('/api/send', (req,res)=>{ 
   const {from,to,subject,body}=req.body;
-  if(!from||!to||!subject||!body)return res.status(400).json({message:'⚠️ Brak danych wiadomości'});
+  if(!from||!to||!subject||!body) return res.status(400).json({message:'⚠️ Brak danych wiadomości'});
   const mails=readJSON(mailsFile);
   mails.push({id:Date.now(),from,to,subject,body,date:new Date().toISOString(),folder:'inbox'});
   writeJSON(mailsFile,mails);
   logUserAction(from,`📤 Wysłano wiadomość do ${to}`,req);
   res.json({message:'📨 Wiadomość wysłana!'});
+  console.log(`Wysłano wiadomość do ${to} od ${from}`);
 });
 
 // Pobieranie wiadomości
@@ -130,6 +142,11 @@ app.delete('/api/delete/:id',(req,res)=>{
   writeJSON(mailsFile,mails);
   logUserAction(mail.from,`❌ Usunięto wiadomość (${id})`,req);
   res.json({message:'🗑️ Mail usunięty'});
+});
+
+// === Obsługa nieznanych endpointów (404) ===
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, '404.html'));
 });
 
 // Start serwera
